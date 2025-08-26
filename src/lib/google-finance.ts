@@ -1,25 +1,22 @@
-import axios from 'axios';
-import * as cheerio from 'cheerio';
 import { googleCache, getCachedData, setCachedData } from './cache';
 import { MarketData } from '../types/portfolio';
 
-function getGoogleFinanceUrl(ticker: string, exchange: string): string {
-  let formattedTicker = ticker;
-  
-  if (ticker.endsWith('.NS')) {
-    formattedTicker = ticker.replace('.NS', '');
-    return `https://www.google.com/finance/quote/${formattedTicker}:NSE`;
-  } else if (ticker.endsWith('.BO')) {
-    formattedTicker = ticker.replace('.BO', '');
-    return `https://www.google.com/finance/quote/${formattedTicker}:BSE`;
-  } else if (exchange === 'NASDAQ') {
-    return `https://www.google.com/finance/quote/${formattedTicker}:NASDAQ`;
-  } else if (exchange === 'NYSE') {
-    return `https://www.google.com/finance/quote/${formattedTicker}:NYSE`;
-  }
-  
-  return `https://www.google.com/finance/quote/${formattedTicker}`;
-}
+// Mock data for P/E ratios and earnings
+const mockData: Record<string, { peRatio?: number; latestEarnings?: number }> = {
+  'RELIANCE.NS': { peRatio: 22.5, latestEarnings: 75.21 },
+  'TCS.NS': { peRatio: 28.3, latestEarnings: 120.56 },
+  'HDFCBANK.NS': { peRatio: 18.7, latestEarnings: 92.45 },
+  'INFY.NS': { peRatio: 24.1, latestEarnings: 65.32 },
+  'TATAMOTORS.NS': { peRatio: 15.8, latestEarnings: 42.18 },
+  'AAPL': { peRatio: 30.2, latestEarnings: 6.14 },
+  'MSFT': { peRatio: 35.7, latestEarnings: 11.33 },
+  'GOOGL': { peRatio: 25.4, latestEarnings: 5.78 },
+  'AMZN': { peRatio: 40.1, latestEarnings: 3.25 },
+  'TSLA': { peRatio: 62.3, latestEarnings: 4.02 },
+};
+
+// Default values for unknown tickers
+const defaultData = { peRatio: 20.0, latestEarnings: 50.0 };
 
 export async function getGoogleStats(
   ticker: string,
@@ -34,39 +31,15 @@ export async function getGoogleStats(
       return cachedData;
     }
     
-    console.log(`[Cache Miss] Fetching Google stats for ${ticker}`);
-    const url = getGoogleFinanceUrl(ticker, exchange);
+    console.log(`[Cache Miss] Using mock data for ${ticker}`);
     
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      },
-    });
-    
-    const $ = cheerio.load(response.data);
-    const result: MarketData = {};
-    
-    $('.gyFHrc').each((i, el) => {
-      const label = $(el).find('.mfs7Fc').text();
-      const value = $(el).find('.P6K39c').text();
-      
-      if (label.includes('P/E ratio')) {
-        const peRatio = parseFloat(value.replace(/,/g, ''));
-        if (!isNaN(peRatio)) {
-          result.peRatio = peRatio;
-        }
-      } else if (label.includes('EPS')) {
-        const earnings = parseFloat(value.replace(/,/g, ''));
-        if (!isNaN(earnings)) {
-          result.latestEarnings = earnings;
-        }
-      }
-    });
+    // Use mock data or default values
+    const result: MarketData = mockData[ticker] || defaultData;
     
     setCachedData(googleCache, cacheKey, result);
     return result;
   } catch (error) {
-    console.error(`Error fetching Google stats for ${ticker}:`, error);
+    console.error(`Error getting stats for ${ticker}:`, error);
     return {};
   }
 }
@@ -75,23 +48,16 @@ export async function getGoogleStatsForMultiple(
   tickers: Array<{ ticker: string; exchange: string }>
 ): Promise<Record<string, MarketData>> {
   try {
-    const promises = tickers.map(({ ticker, exchange }) => 
-      getGoogleStats(ticker, exchange).then(data => ({ ticker, data }))
-    );
-    
-    const results = await Promise.allSettled(promises);
-    
     const statsMap: Record<string, MarketData> = {};
     
-    results.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        statsMap[result.value.ticker] = result.value.data;
-      }
-    });
+    for (const { ticker, exchange } of tickers) {
+      const data = await getGoogleStats(ticker, exchange);
+      statsMap[ticker] = data;
+    }
     
     return statsMap;
   } catch (error) {
-    console.error('Error fetching Google stats for multiple tickers:', error);
+    console.error('Error getting stats for multiple tickers:', error);
     return {};
   }
 }
