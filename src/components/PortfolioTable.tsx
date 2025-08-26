@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   createColumnHelper,
-  flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -57,62 +56,42 @@ export default function PortfolioTable({ data, isLoading = false }: PortfolioTab
     () => [
       columnHelper.accessor('particulars', {
         header: 'Particulars',
-        cell: (info) => info.getValue(),
       }),
       columnHelper.accessor('purchasePrice', {
         header: 'Purchase Price',
-        cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor('quantity', {
         header: 'Quantity',
-        cell: (info) => formatNumber(info.getValue()),
       }),
       columnHelper.accessor('investment', {
         header: 'Investment',
-        cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor('portfolioPercentage', {
         header: 'Portfolio %',
-        cell: (info) => formatPercentage(info.getValue()),
       }),
       columnHelper.accessor('exchange', {
         header: 'Exchange',
-        cell: (info) => info.getValue(),
       }),
       columnHelper.accessor('currentPrice', {
         header: 'CMP',
-        cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor('presentValue', {
         header: 'Present Value',
-        cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor('gainLoss', {
         header: 'Gain/Loss',
-        cell: (info) => {
-          const value = info.getValue();
-          const colorClass = value === undefined ? '' : value >= 0 ? 'text-green-600' : 'text-red-600';
-          return <span className={colorClass}>{formatCurrency(value)}</span>;
-        },
       }),
       columnHelper.accessor('gainLossPercentage', {
         header: 'Gain/Loss %',
-        cell: (info) => {
-          const value = info.getValue();
-          const colorClass = value === undefined ? '' : value >= 0 ? 'text-green-600' : 'text-red-600';
-          return <span className={colorClass}>{formatPercentage(value)}</span>;
-        },
       }),
       columnHelper.accessor('peRatio', {
         header: 'P/E Ratio',
-        cell: (info) => formatNumber(info.getValue()),
       }),
       columnHelper.accessor('latestEarnings', {
         header: 'Latest Earnings',
-        cell: (info) => formatCurrency(info.getValue()),
       }),
     ],
-    []
+    [columnHelper]
   );
 
   const table = useReactTable({
@@ -156,19 +135,46 @@ export default function PortfolioTable({ data, isLoading = false }: PortfolioTab
     {}
   );
 
+  // Helper function to format cell values based on column type
+  const formatCellValue = (columnId: keyof Snapshot, value: number | string | undefined) => {
+    if (value === undefined) return '—';
+    
+    switch (columnId) {
+      case 'purchasePrice':
+      case 'investment':
+      case 'currentPrice':
+      case 'presentValue':
+      case 'latestEarnings':
+        return formatCurrency(value as number);
+      case 'quantity':
+      case 'peRatio':
+        return formatNumber(value as number);
+      case 'portfolioPercentage':
+        return formatPercentage(value as number);
+      case 'gainLoss':
+        return (
+          <span className={(value as number) >= 0 ? 'text-green-600' : 'text-red-600'}>
+            {formatCurrency(value as number)}
+          </span>
+        );
+      case 'gainLossPercentage':
+        return (
+          <span className={(value as number) >= 0 ? 'text-green-600' : 'text-red-600'}>
+            {formatPercentage(value as number)}
+          </span>
+        );
+      default:
+        return value as string;
+    }
+  };
+
   const renderHoldingRow = (holding: Snapshot) => (
     <tr key={`${holding.sector}-${holding.particulars}`} className="hover:bg-gray-50">
       {table.getAllColumns().map((column) => {
-        const cell = column.columnDef.cell;
+        const columnId = column.id as keyof Snapshot;
         return (
           <td key={column.id} className="px-4 py-2 border-b text-gray-900">
-            {cell && typeof cell === 'function'
-              ? flexRender(cell, {
-                  column,
-                  row: { original: holding },
-                  getValue: () => holding[column.id as keyof Snapshot]
-                })
-              : holding[column.id as keyof Snapshot]}
+            {formatCellValue(columnId, holding[columnId])}
           </td>
         );
       })}
@@ -235,9 +241,7 @@ export default function PortfolioTable({ data, isLoading = false }: PortfolioTab
                 key={column.id}
                 className="px-4 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider sticky top-0 bg-gray-50"
               >
-                {column.columnDef.header && typeof column.columnDef.header === 'function'
-                  ? flexRender(column.columnDef.header, { column })
-                  : column.columnDef.header || column.id}
+                {typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id}
               </th>
             ))}
           </tr>
@@ -260,7 +264,7 @@ export default function PortfolioTable({ data, isLoading = false }: PortfolioTab
       </table>
       
       <div className="mt-4 text-xs text-gray-800 font-medium">
-        <p>Last updated: {data.lastUpdated.toLocaleString()}</p>
+        <p>Last updated: {new Date(data.lastUpdated).toLocaleString()}</p>
         <p>Data refreshes every 15 seconds</p>
       </div>
     </div>
